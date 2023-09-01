@@ -3,13 +3,15 @@ title: "Heli-attack times"
 author: "MichaelStorey_MichaelJones"
 date: "28 May 2020"
 output: html_document
+---
 
+```         
 To Do:
   * Create waterpoints/reservoir/lakes layer
   * Classify water points (long line, medium heavy etc.)
   * Amend script point creation to exclude demand points in the ocean/NSW
   * Improve leaflet maps (scalable symbols? Or IDW raster or something?)
----
+```
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -37,9 +39,9 @@ library(htmltools)
 output_path <- "C:/Projects/20230829_HeliWaterPoints/test/outputs"
 
 # define input layer locations
-dem <- "C:/Projects/20230829_HeliWaterPoints/MJ_Methodology/data/DEM_SE_Tas_mosaic.tif"
-water_poly_full_path <- "C:/Projects/20230829_HeliWaterPoints/MJ_Methodology/data/reservoir_all_new.shp"
-new_dams_full_path <- "C:/Projects/20230829_HeliWaterPoints/MJ_Methodology/data/potential_dam_locations_14052020.shp"
+dem <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/data/DEM_SE_Tas_mosaic.tif"
+water_poly_full_path <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/data/reservoir_all_new.shp"
+new_dams_full_path <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/data/potential_dam_locations_14052020.shp"
 
 # helicopter speeds in kilometers per hour
 all_empty_kmh <- 148
