@@ -1,0 +1,33 @@
+{
+    "id": "CB79EB09",
+    "path": "C:/Projects/20230829_HeliWaterPoints/waterpoints/r/helicopter_path_updated.Rmd",
+    "project_path": null,
+    "type": "r_markdown",
+    "hash": "636112353",
+    "contents": "",
+    "dirty": false,
+    "created": 1693285277236.0,
+    "source_on_save": false,
+    "relative_order": 1,
+    "properties": {
+        "source_window_id": "",
+        "Source": "Source",
+        "cursorPosition": "0,0",
+        "scrollLine": "0",
+        "last_setup_crc32": "79ccc141e71e92b8",
+        "rmdVisualMode": "true",
+        "rmdVisualCollapsedChunks": "",
+        "rmdVisualModeLocation": "367:0",
+        "rmdVisualWrapConfigured": "true",
+        "docOutlineVisible": "1",
+        "docOutlineSize": "111"
+    },
+    "folds": "",
+    "lastKnownWriteTime": 1693534518,
+    "encoding": "UTF-8",
+    "collab_server": "",
+    "source_window": "",
+    "last_content_update": 1693534518183,
+    "read_only": false,
+    "read_only_alternatives": []
+}

@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1573187595146.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3721436001",
+    "id" : "47DC6574",
+    "lastKnownWriteTime" : 1559101232,
+    "last_content_update" : 1559101232,
+    "path" : "C:/Users/ms4w/working_directory/Reduce_AllCells_csv_PortPhillip_unzip.R",
+    "project_path" : null,
+    "properties" : {
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

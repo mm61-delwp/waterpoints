@@ -1,0 +1,220 @@
+---
+title: "Heli-attack times"
+author: "MichaelStorey"
+date: "22 October 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+#set local library path so R knows where to look. You will also need to run this line below before downloading new packages, just due to some centiex issues.
+.libPaths("C:/Users/ms4w/R_packages")
+
+#load necessary packages
+library(sf)
+library(dplyr)
+library(leaflet)
+library(leaflet.extras)
+library(htmltools)
+
+```
+
+
+
+Set the variables for grid size and heli speeds
+```{r}
+#define the heli speeds in kmh
+all_empty_kmh<- 148
+full_ascend_kmh<-74
+full_level_kmh<-148 #same as full descending
+
+#point grid size for analysis in metres
+point_grid_size<-2500
+
+#how many metres should each line (that will be drawn between a point and a reservoir) be samples
+line_sample_point_dist<-100
+
+#choice of whether to include new dams or not. Put 0 to not include (only current reservoirs),put 1 to include (current reservois plus new dams)
+include_new_dams<- 0
+
+#output path for point and line shapefiles.
+#Remember slashes need to be opposite way than usual for r.  e.g "D:/TEMP/"
+output_path<- "D:/TEMP/"
+
+#Paths to the necassary files,(make sure these are pointing to the right place, remember R likes slashes opposite in path names)
+dem<-"D:/MS/Projects/HeliAttack_travel_times/data/DEM_SE_Tas_mosaic.tif"
+water_poly_full_path<-"D:/MS/Projects/HeliAttack_travel_times/data/reservoir.shp"
+new_dams_full_path<-"D:/MS/Projects/HeliAttack_travel_times/data/potential_dam_locations.shp"
+
+```
+
+
+Load shapefiles 
+Transform coordinate reference system (CRS),and define the variable.
+Create a point grid across region (ie encompassing the reservoirs of interest).
+Plot grid points black and water in blue
+
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#load and project shapefiles
+
+water_poly<-st_read(water_poly_full_path,quiet=TRUE) %>% st_transform(3111,quiet=TRUE) %>% filter(NAME == "UPPER YARRA RESERVOIR" | NAME == "THOMSON DAM" | NAME == "LAKE EILDON" )
+
+new_dams<-st_read(new_dams_full_path,quiet=TRUE)  
+
+st_crs(new_dams)<-3111
+point_grid<- water_poly %>% st_make_grid(point_grid_size,what='centers') %>% st_as_sf()
+water_points<-st_cast(water_poly,"POINT")
+
+#test to see if new dams included based on variable value entered above
+if(include_new_dams == 1){water_points<-st_union(water_points,new_dams) %>% st_cast("POINT")}
+
+
+#plots
+plot(st_geometry(point_grid))
+plot(st_geometry(water_points),col='blue',add=TRUE)
+```
+
+
+Draw a line from every point in grid to its closest water source.
+Plot grid points black, lines brown and water in blue
+
+```{r message=FALSE, warning=FALSE}
+
+#draw lines from every grid point to nearest water point
+nn<-nngeo::st_nn(point_grid,water_points,k=1,progress = FALSE)
+near_lines<-nngeo::st_connect(point_grid,water_points,k=1,progress = FALSE)
+near_lines<-st_as_sf(near_lines) 
+near_lines$line_id<-seq.int(nrow(near_lines))
+
+water_points$wp_id<-seq.int(nrow(water_points))
+point_grid<-st_join(point_grid,water_points,join=st_nearest_feature)
+near_lines$wp_id<-point_grid$wp_id
+
+plot(st_geometry(point_grid))
+plot(st_geometry(water_points),col='blue',add=TRUE)
+plot(st_geometry(near_lines),col="brown",add=TRUE)
+```
+
+For every line from point grid to water, densify line (make vertice every 100 metres) and
+turn vertices into points (transferring line id to new point feature class)
+
+Sample the DEM for every line vertex point, and select the point with the maximum elevation.
+
+Also sample DEM for elevation of start point (where fire would be) and end point (water point)
+
+Calculate the difference in elevation between start, end, and max elevation
+
+Plots now have max dem point in red
+
+
+```{r message=FALSE, warning=FALSE}
+
+near_lines_dense<- near_lines%>% smoothr::densify(max_distance=line_sample_point_dist)
+near_lines_vertices<-st_cast(near_lines_dense,"POINT",do_split = TRUE,warn = FALSE)
+
+#sample dem
+raster_dem<-raster::raster(dem)
+water_points$dem_wp<-raster::extract(raster_dem,st_transform(water_points,4326))
+point_grid$dem_start<-raster::extract(raster_dem,st_transform(point_grid,4326))
+near_lines$dem_start<-point_grid$dem_start
+
+
+near_lines_vertices$dem_path<-raster::extract(raster_dem,st_transform(near_lines_vertices,4326,quiet=TRUE))
+max_dem_vertice<-near_lines_vertices %>% group_by(line_id) %>% filter(dem_path==max(dem_path)) %>% mutate(n=n()) %>% mutate(positionInCategory = 1:n()) %>% filter(positionInCategory == 1)
+near_lines$peak_dem<-max_dem_vertice$dem_path
+
+#join  height of water point to lines
+d<-data.frame(water_points %>% select(wp_id,dem_wp)) %>% select(-geometry)
+near_lines<- near_lines %>% left_join(d,by="wp_id") 
+
+#calculate height differences
+near_lines$st_peak_diff<-near_lines$peak_dem- near_lines$dem_start
+near_lines$wp_peak_diff<-near_lines$peak_dem- near_lines$dem_wp
+
+plot(st_geometry(point_grid))
+plot(st_geometry(water_points),col='blue',add=TRUE)
+plot(st_geometry(near_lines),add=TRUE,col='brown')
+plot(st_geometry(max_dem_vertice),add=TRUE,col = 'red')
+
+
+```
+
+Calculate the distances between start to high dem point, and high dem point to end (water)
+
+Using distances, height differences and speeds (all_empty_kmh<-148,full_ascend_kmh<-74,full_level_kmh<-148) to calculate time
+on different segments of line. At the moment this assumes heli ascends and descends vertically (not on an angle)
+
+
+```{r message=FALSE, warning=FALSE}
+#get distance between high point and start and end points
+high_point_to_wp<-st_distance(max_dem_vertice,water_points)
+near_lines$peak_to_wp<-as.numeric(apply(high_point_to_wp, 1, FUN=min))
+near_lines$dist<-as.numeric(st_length(near_lines)) 
+near_lines$peak_to_start<-near_lines$dist - near_lines$peak_to_wp
+
+#calculate slope
+near_lines$slp_wp_dist<-sqrt((near_lines$wp_peak_diff^2)+(near_lines$peak_to_wp^2))
+near_lines$slp_start_dist<-sqrt((near_lines$st_peak_diff^2)+(near_lines$peak_to_start^2))
+
+#calculate times
+near_lines <- near_lines %>% mutate(time_full_ascend = (wp_peak_diff/1000)/full_ascend_kmh) %>% 
+  mutate(time_full_level = (dist/1000)/full_level_kmh) %>% 
+  mutate(time_full_descend = (st_peak_diff/1000)/full_level_kmh) %>% 
+  mutate(time_empty_ascend = (st_peak_diff/1000)/all_empty_kmh) %>% 
+  mutate(time_empty_level = (dist/1000)/all_empty_kmh) %>% 
+  mutate(time_empty_descend = (wp_peak_diff/1000)/all_empty_kmh) %>% 
+  mutate(total_time = round((time_full_ascend + time_full_level +time_full_descend +
+           time_empty_ascend + time_empty_level + time_empty_descend)*60),1)
+
+point_grid$total_time<-near_lines$total_time
+
+#calculate times using pythagoras (ie assuming heli flies on angles over)
+near_lines <- near_lines %>% mutate(time_full_ascend_slope = (slp_wp_dist/1000)/full_ascend_kmh) %>% 
+  mutate(time_full_descend_slope = (slp_start_dist/1000)/full_level_kmh) %>% 
+  mutate(time_empty_ascend_slope = (slp_start_dist/1000)/all_empty_kmh) %>% 
+  mutate(time_empty_descend_slope = (slp_wp_dist/1000)/all_empty_kmh) %>% 
+  mutate(total_time_slope = round((time_full_ascend_slope +time_full_descend_slope +
+           time_empty_ascend_slope + time_empty_descend_slope)*60),1)
+
+point_grid$total_time<-near_lines$total_time
+point_grid$total_time_slope<-near_lines$total_time_slope
+
+st_write(point_grid, paste0(output_path, "/point_grid.shp"), delete_layer = TRUE)
+st_write(near_lines, paste0(output_path, "/near_lines.shp"), delete_layer = TRUE)
+#st_write(max_dem_vertice, paste0("D:/TEMP/", "max_dem.shp"), delete_layer = TRUE)
+
+```
+
+Interactive map of time to closest reservoir (in minutes). Click on a point to see the minutes
+This map is assuming helicopters ascend and descend vertically, and fly horizontally in between
+```{r message=FALSE, warning=FALSE}
+#distances
+point_grid_wgs<-st_transform(point_grid,4326) %>% filter(total_time > 0) %>% as("Spatial")
+qpal<- colorNumeric(palette = "YlOrBr",domain = seq(50))
+
+map<-leaflet(point_grid_wgs) %>%addProviderTiles(providers$OpenStreetMap.BlackAndWhite) %>% addCircleMarkers(color = ~qpal(total_time), popup=~htmlEscape(total_time), radius=10, fillOpacity = 1) %>% addPolygons(data=as(st_transform(water_poly,4326),"Spatial"))%>% 
+  addLegend("bottomright", pal = qpal, values = ~total_time,title = "time in minutes",opacity = 1)# %>%
+  #addCircleMarkers(data=as(st_transform(new_dams,4326),"Spatial"),color = "blue", radius=10, fillOpacity = 1) 
+map 
+
+
+
+```
+
+This map is assuming helicopters fly on angles over peaks
+```{r message=FALSE, warning=FALSE}
+#distances
+point_grid_wgs<-st_transform(point_grid,4326) %>% filter(total_time_slope > 0) %>% as("Spatial")
+qpal<- colorNumeric(palette = "YlOrBr",domain = seq(50))
+
+map<-leaflet(point_grid_wgs) %>%addProviderTiles(providers$OpenStreetMap.BlackAndWhite) %>% addCircleMarkers(color = ~qpal(total_time_slope), popup=~htmlEscape(total_time_slope), radius=10, fillOpacity = 1) %>% addPolygons(data=as(st_transform(water_poly,4326),"Spatial"))%>% 
+  addLegend("bottomright", pal = qpal, values = ~total_time_slope,title = "time in minutes",opacity = 1)# %>%
+  #addCircleMarkers(data=as(st_transform(new_dams,4326),"Spatial"),color = "blue", radius=10, fillOpacity = 1) 
+map 
+
+
+
+```
+
+

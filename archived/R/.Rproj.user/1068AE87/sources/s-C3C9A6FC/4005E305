@@ -1,0 +1,26 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1573187397762.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "4005E305",
+    "lastKnownWriteTime" : 1573431676,
+    "last_content_update" : 1573431676986,
+    "path" : "D:/MS/Projects/HeliAttack_travel_times/R/helicopter_path.Rmd",
+    "project_path" : "helicopter_path.Rmd",
+    "properties" : {
+        "cursorPosition" : "10,110",
+        "last_setup_crc32" : "A7C707A6d9311936",
+        "scrollLine" : "0"
+    },
+    "read_only" : false,
+    "read_only_alternatives" : [
+    ],
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

@@ -1,0 +1,47 @@
+.libPaths("C:/Users/ms4w/R_packages")
+library(data.table)
+library(dplyr)
+#library(rgdal)
+#library(sp)
+#list the all cells directory (each all cells in a separate folder)
+
+#list all zip files in a folder (point this to the all cells folder)
+all_cells_dir <- paste("C:/Phoenix_unzipping//",sep="")
+zip_list<-list.files(all_cells_dir,pattern="AllCells.zip",recursive = FALSE)
+#create an output folder
+reduced_dir <-paste(all_cells_dir,"/","reduced_ie",sep="")
+dir.create(reduced_dir)
+#load the reference csv (has cell ids for area of interest)
+cell_ref_csv<-fread("C:/Phoenix_unzipping/reference_location_csv/PP_buffer2500_gridcells.csv",nThread = 8)
+#loop through each all cells and filter to match cell_ref_csv IDs and by intensity and ember density
+for (zip1 in zip_list) {
+  #create name for reduced AllCells folder and check if it already exists with if (don't run if already exists)
+  new_dir<-paste(reduced_dir,'/',gsub(".zip","",zip1),sep="")
+  if(!dir.exists(new_dir)){
+    print(zip1)
+
+    #Create folder name for unzipped AllCells (original) and unzip
+    unzip_dir<-paste(all_cells_dir,'/',gsub(".zip","",zip1),sep="")
+    unzip(paste(all_cells_dir,'/',zip1,sep=''),exdir =unzip_dir)
+    #get path of the newly unzipped AllCells
+    all_cell_path<-paste(unzip_dir,"/","AllCells.csv",sep="")
+    #filter AllCells to only those with a CellID matching the reference csv CellIds
+    cellid_list<-unique(cell_ref_csv$cellid)
+    AC_CSV <- fread(all_cell_path,nThread = 8)
+    AC_CSV_reduced<-AC_CSV[AC_CSV$CellId %in% cellid_list,]
+    #filter by intensity and ember density
+    AC_CSV_reduced<-AC_CSV_reduced %>% filter(Intensity > 10000 | EmberDensity > 2.5)
+    #create folder for reduced all cells and write new csv
+    dir.create(new_dir)
+    fwrite(AC_CSV_reduced,paste(new_dir,"/","AllCells.csv",sep=""))
+    
+    #Create a shapefile to check the reduced csv file has the right points (need to join x and y field first)
+    #cell_ref_csv_xy <- cell_ref_csv %>% select(cellid,x_coord,y_coord)
+    #check_shp<-AC_CSV_reduced %>% inner_join(cell_ref_csv_xy,by=c("CellId"="cellid"))
+    #coordinates(check_shp)<-~x_coord+y_coord
+    #writeOGR(check_shp,new_dir,paste(loc_name,"AllCellscheck",sep=""),driver = "ESRI Shapefile")
+    #remove(AC_CSV)
+    #remove(AC_CSV_reduced)
+    #remove(check_shp)
+  }
+}
