@@ -112,7 +112,7 @@ plot(st_geometry(near_lines),col="brown",add=TRUE)
 
 ### chunk 5
 
--   For every line from point grid to water, densify line (make vertice every 100 metres) and turn vertices into points (transferring line id to new point feature class)
+-   For every line from point grid to water, densify line (make vertex every 100 metres) and turn vertices into points (transferring line id to new point feature class)
 -   Sample the DEM for every line vertex point, and select the point with the maximum elevation.
 -   Sample the DEM for elevation of start point (where fire would be) and end point (water point)
 -   Calculate the difference in elevation between start, end, and max elevation
