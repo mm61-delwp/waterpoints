@@ -44,9 +44,10 @@ output_path <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/outputs"
 input_path <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/data/"
 
 # shapefile names
-dem_file <- "DEM_SE_Tas_mosaic.tif"
-water_poly_file <- "reservoir_all_new.shp"
-new_dams_file <- "potential_dam_locations_14052020.shp"
+dem_file        <- "DEM_SE_Tas_mosaic.tif"
+water_poly_file <- "VMHYDRO_HY_WATER_POINT_GippsBuff.shp" # Actually a point file for now
+new_dams_file   <- "potential_dam_locations_14052020.shp"
+demand_points   <- "demandpoints_5kmIgnitionGrid.shp"
 
 # specify which water points to include (not required, but fix if needed)
 # water_poly_filter <- (NAME == ... | ... | ...)
@@ -69,6 +70,7 @@ include_new_dams <- 0
 dem <- file.path(input_path, dem_file)
 water_poly_full_path <- file.path(input_path, water_poly_file)
 new_dams_full_path <- file.path(input_path, new_dams_file)
+demand_points_full_path <- file.path(input_path, demand_points)
 
 ```
 
@@ -87,7 +89,9 @@ water_poly<-st_read(water_poly_full_path,quiet=TRUE) %>% st_transform(3111,quiet
 
 new_dams<-st_read(new_dams_full_path,quiet=TRUE)  
 st_crs(new_dams)<-3111
-point_grid<- water_poly %>% st_make_grid(point_grid_size,what='centers') %>% st_as_sf()
+#point_grid<- water_poly %>% st_make_grid(point_grid_size,what='centers') %>% st_as_sf()
+point_grid<-st_read(demand_points_full_path,quiet=TRUE) %>% st_transform(3111,quiet=TRUE) 
+
 water_points<-st_cast(water_poly,"POINT")
 
 # add new dams to water points if include_new_dams variable set to 1
@@ -133,7 +137,7 @@ water_points$dem_wp<-raster::extract(raster_dem,st_transform(water_points,4326))
 point_grid$dem_start<-raster::extract(raster_dem,st_transform(point_grid,4326))
 near_lines$dem_start<-point_grid$dem_start
 
-near_lines_vertices$dem_path <- raster::extract(raster_dem, st_transform(near_lines_vertices, 4326, quiet=TRUE))
+near_lines_vertices$dem_path <- raster::extract(raster_dem, st_transform(near_lines_vertices, 4326, quiet=FALSE))
 max_dem_vertex <- near_lines_vertices %>% group_by(line_id) %>% filter(dem_path==max(dem_path)) %>% mutate(n=n()) %>% mutate(positionInCategory = 1:n()) %>% filter(positionInCategory == 1)
 near_lines$peak_dem <- max_dem_vertex$dem_path
 
@@ -227,16 +231,63 @@ point_grid$total_time_slope<-near_lines$total_time_slope
 
 ```{r Chunk 6: Map 1, message=FALSE, warning=FALSE}
 
-#distances
+# Generate travel time grid
 point_grid_wgs<-st_transform(point_grid,4326) %>% filter(total_time > 0) %>% as("Spatial")
-qpal<- colorNumeric(palette = "YlOrBr",domain = seq(50))
 
-map<-leaflet(point_grid_wgs) %>%
+# Create a custom color palette from green (0) to red (30)
+qpal <- colorNumeric(
+  palette = c("green", "red"),
+  domain = c(0, 20)
+)
+
+# Create a Leaflet map
+map <- leaflet(point_grid_wgs) %>%
   addTiles() %>% 
-  addCircleMarkers(color = ~qpal(total_time), popup=~htmlEscape(total_time), radius=10, fillOpacity = 1) %>% addPolygons(data=as(st_transform(water_poly,4326),"Spatial"))%>% 
-  addLegend("bottomright", pal = qpal, values = ~total_time,title = "time in minutes",opacity = 1)# %>%
-  #addCircleMarkers(data=as(st_transform(new_dams,4326),"Spatial"),color = "blue", radius=10, fillOpacity = 1) 
-map 
+  setView(lng = 147.2, lat = -37.5, zoom = 8) %>%
+  addCircleMarkers(
+    color = ~qpal(total_time),
+    popup = ~htmlEscape(total_time), 
+    radius = 3, 
+    fillOpacity = 0.5
+  ) %>%
+  addLegend(
+    "bottomright",
+    pal = qpal, values = ~total_time,
+    title = "time in minutes",
+    opacity = 1
+  )
+
+# Create a JavaScript function to update circle size based on zoom
+# NOTE: I can't make this work at the moment.
+js_code <- "
+function(e) {
+  var zoom = e.target.getZoom();              // Get the current zoom level
+  var newRadius = 8 / zoom;                   // Adjust the radius based on zoom level
+  map.eachLayer(function(layer) {
+    if (layer instanceof L.CircleMarker) {
+      layer.setRadius(newRadius);             // Update the circle's radius
+    }
+  });
+}
+"
+
+# Add an event listener to the map
+map <- map %>%
+  htmlwidgets::onRender(js_code)
+
+# Add blue circles
+map <- map %>%
+  addCircleMarkers(
+    data = as(st_transform(water_poly, 4326), "Spatial"),
+    color = "blue", 
+    radius = 1, 
+    stroke = FALSE,
+    fillOpacity = 0.5
+  )
+
+# Print the map
+map
+
 
 ```
 
@@ -246,15 +297,62 @@ map
 
 ```{r message=FALSE, warning=FALSE}
 
-#distances
+# Generate travel time grid
 point_grid_wgs<-st_transform(point_grid,4326) %>% filter(total_time_slope > 0) %>% as("Spatial")
-qpal<- colorNumeric(palette = "YlOrBr",domain = seq(50))
 
-map<-leaflet(point_grid_wgs) %>%
-  addTiles() %>% addCircleMarkers(color = ~qpal(total_time_slope), popup=~htmlEscape(total_time_slope), radius=5, fillOpacity = 0.5) %>% addPolygons(data=as(st_transform(water_poly,4326),"Spatial"))%>% 
-  addLegend("bottomright", pal = qpal, values = ~total_time_slope,title = "time in minutes",opacity = 1)# %>%
-  #addCircleMarkers(data=as(st_transform(new_dams,4326),"Spatial"),color = "blue", radius=10, fillOpacity = 1) 
-map 
+# Create a custom color palette from green (0) to red (30)
+qpal <- colorNumeric(
+  palette = c("green", "red"),
+  domain = c(0, 20)
+)
+
+# Create a Leaflet map
+map <- leaflet(point_grid_wgs) %>%
+  addTiles() %>% 
+  setView(lng = 147.2, lat = -37.5, zoom = 8) %>%
+  addCircleMarkers(
+    color = ~qpal(total_time),
+    popup = ~htmlEscape(total_time), 
+    radius = 3, 
+    fillOpacity = 0.5
+  ) %>%
+  addLegend(
+    "bottomright",
+    pal = qpal, values = ~total_time,
+    title = "time in minutes",
+    opacity = 1
+  )
+
+# Create a JavaScript function to update circle size based on zoom
+# NOTE: I can't make this work at the moment.
+js_code <- "
+function(e) {
+  var zoom = e.target.getZoom();              // Get the current zoom level
+  var newRadius = 8 / zoom;                   // Adjust the radius based on zoom level
+  map.eachLayer(function(layer) {
+    if (layer instanceof L.CircleMarker) {
+      layer.setRadius(newRadius);             // Update the circle's radius
+    }
+  });
+}
+"
+
+# Add an event listener to the map
+map <- map %>%
+  htmlwidgets::onRender(js_code)
+
+# Add blue circles
+map <- map %>%
+  addCircleMarkers(
+    data = as(st_transform(water_poly, 4326), "Spatial"),
+    color = "blue", 
+    radius = 1, 
+    stroke = FALSE,
+    fillOpacity = 0.5
+  )
+
+# Print the map
+map
 
 ```
 
