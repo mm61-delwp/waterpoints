@@ -1,0 +1,17 @@
+sf
+dplyr
+leaflet
+leaflet.extras
+htmltools
+spatstat.data
+spatstat.geom
+spatstat.random
+nlme
+spatstat.explore
+rpart
+spatstat.model
+spatstat.linnet
+spatstat
+leafem
+sp
+raster

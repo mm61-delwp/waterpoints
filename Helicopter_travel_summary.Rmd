@@ -1,0 +1,187 @@
+---
+title: "Helicopter Travel Time Summary"
+author: "Michael May, Mitchell Stephen"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Introduction
+
+This document demonstrates the modified application of the helicopter travel time analysis process developed by Michael Storey and Michael Jones for Port Phillip to the Gippsland context. The logic is the same, but the process has been updated to enable the use of larger datasets and resolve some issues.
+
+This is a demonstration only. It has known limitations and faults:
+
+-   Incomplete locations of helidam water points on public land - these are not available in any complete/consolidated form.
+-   Uncertainty about the suitability of private dams and other water bodies for helicopter water points.
+-   Models of helicopter flight are rudimentary and unrealistic.
+
+We are currently seeking better water point data, and have drafted a more realistic method for estimating helicopter flight. 
+
+```{r Chunk 1: Load data, message=FALSE, warning=FALSE, out.width='100%'}
+# load necessary libraries
+  library(sf)
+  library(dplyr)
+  library(leaflet)
+  library(leaflet.extras)
+  library(htmltools)
+  library(leafem)
+  library(raster)
+
+# path locations
+  output_path <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/outputs"
+  input_path  <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/data/"
+
+# file names
+  raster_simple <- "raster_simple_compressed.tif"
+  raster_slope  <- "raster_slope_compressed.tif"
+  wp_combined   <- "Waterpoints_Combined_20230912.shp"
+  districts     <- "LF_DISTRICT.shp"
+
+# construct full file paths
+  raster_simple_full_path <- file.path(output_path, raster_simple)
+  raster_slope_full_path  <- file.path(output_path, raster_slope)
+  wp_combined_full_path   <- file.path(input_path, wp_combined)
+  districts_full_path     <- file.path(input_path, districts)
+
+# import previously processed data
+  raster_simple     <- raster::raster(raster_simple_full_path)
+  raster_slope      <- raster::raster(raster_slope_full_path)
+  waterpoints       <- st_read(wp_combined_full_path, quiet=TRUE) %>% st_transform(4326, quiet=TRUE)
+  districts_outline <- st_read(districts_full_path, quiet = TRUE) %>%
+    st_transform(4326, quiet = TRUE) %>%
+    filter(DISTRICT_N == "TAMBO" | DISTRICT_N == "MACALISTER" | DISTRICT_N =="SNOWY" | DISTRICT_N == "LATROBE")
+  
+  simple_range = range(values(raster_simple))
+  slope_range = range(values(raster_slope))
+```
+
+### Helicopter travel time map (simple)
+
+-   Interactive map of time to closest reservoir (in minutes). Hover mouse over to see return times.
+-   This map assumes helicopters ascend and descend vertically, and fly horizontally in-between
+
+```{r Chunk 2: Map 1 (simple), message=FALSE, warning=FALSE, out.width='100%'}
+
+# Create a custom color palette from green (0) to red (30)
+  custom_palette <- colorRampPalette(c("green", "yellow", "orange", "red"))(10)
+  custom_palette <- colorBin(custom_palette, c(0, 30), 10, pretty = FALSE)
+
+# Create a Leaflet map
+  map_raster_simple <- leaflet() %>%
+    addProviderTiles("OpenStreetMap") %>%
+    setView(147.20, -37.72,zoom = 8) %>%
+    addPolygons(
+      data = as(districts_outline, "Spatial"),
+      smoothFactor = 0.2,
+      color = 'purple',
+      weight =0.8,
+      opacity = 0.5,
+      fillOpacity = 0
+    ) %>%
+    addRasterImage(
+      raster_simple,
+      project = TRUE,
+      group = "Minutes",
+      layerId = "Minutes",
+    colors = custom_palette,
+    opacity = 0.5
+    ) %>%
+    addPolygons(
+      data = as(waterpoints, "Spatial"),
+    stroke = FALSE,
+    smoothFactor = 0.2,
+    fillColor = 'blue',
+    fillOpacity = 0.8
+    ) %>%
+    addImageQuery(
+      raster_simple,
+      project = TRUE,
+      layerId = "Minutes",
+      digits = 1,
+      prefix = "Helicopter return"
+    ) %>%
+    addLegend(
+      "bottomright",
+      values = simple_range,
+      pal = custom_palette,
+      title = "Time in minutes",
+      opacity = 0.5
+    )
+  
+  # draw map
+  map_raster_simple
+
+```
+
+### Helicopter travel time map (alternative)
+
+-   Interactive map of time to closest reservoir (in minutes). Hover mouse over to see return times.
+-   This map assumes helicopters fly on angles over peaks
+
+```{r Chunk 3: Map 2 (advanced), message=FALSE, warning=FALSE, out.width='100%'}
+
+# Create a custom color palette from green (0) to red (30)
+  custom_palette <- colorRampPalette(c("green", "yellow", "orange", "red"))(10)
+  custom_palette <- colorBin(custom_palette, c(0, 30), 10, pretty = FALSE)
+
+# Create a Leaflet map
+  map_raster_slope <- leaflet() %>%
+    addProviderTiles("OpenStreetMap") %>%
+    setView(147.20, -37.72, zoom = 8) %>%
+    addPolygons(
+      data = as(districts_outline, "Spatial"),
+      smoothFactor = 0.2,
+      color = 'purple',
+      weight = 0.8,
+      opacity = 0.5,
+      fillOpacity = 0
+    ) %>%
+    addRasterImage(
+      raster_slope,
+      project = TRUE,
+      group = "Time",
+      layerId = "Time",
+      colors = custom_palette,
+      opacity = 0.5
+    ) %>%
+    addPolygons(
+      data = as(waterpoints, "Spatial"),
+      stroke = FALSE,
+      smoothFactor = 0.2,
+      fillColor = 'blue',
+      fillOpacity = 0.8
+    ) %>%
+    addImageQuery(
+      raster_slope,
+      project = TRUE,
+      layerId = "Time",
+      digits = 1,
+      prefix = "Helicopter return"
+    ) %>%
+    addLegend(
+      "bottomright",
+      values = slope_range,
+      pal = custom_palette,
+      title = "Time in minutes",
+      opacity = 0.5
+    )
+  
+  #draw map
+  map_raster_slope
+
+```
+
+### Summary statistics
+
+-   To do:
+  -   Average times per region, district, workcentre
+  -   Add bushfire risk information: potential fire size & house loss from bushfire originating at demand point locations.
+
+```{r Chunk 4: Improved method, message=FALSE, warning=FALSE, out.width='100%'}
+
