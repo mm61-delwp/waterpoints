@@ -21,7 +21,7 @@ This is a demonstration only. It has known limitations and faults:
 -   Uncertainty about the suitability of private dams and other water bodies for helicopter water points.
 -   Models of helicopter flight are rudimentary and unrealistic.
 
-We are currently seeking better water point data, and have drafted a more realistic method for estimating helicopter flight. 
+We are currently seeking better water point data, and have drafted a more realistic method for estimating helicopter flight.
 
 ```{r Chunk 1: Load data, message=FALSE, warning=FALSE, out.width='100%'}
 # load necessary libraries
@@ -33,94 +33,104 @@ We are currently seeking better water point data, and have drafted a more realis
   library(spatstat)
   library(leafem)
   library(raster)
+  library(ggplot2)
+  library(formattable)
 
 # path locations
-  output_path <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/outputs"
-  input_path  <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/data/"
+  output_path   <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/outputs"
+  input_path    <- "C:/Projects/20230829_HeliWaterPoints/waterpoints/data/"
 
 # file names
   raster_simple <- "travel_time_simple.tif"
   raster_slope  <- "travel_time_slope.tif"
   wp_combined   <- "Waterpoints_Combined_20230912.shp"
   districts     <- "LF_DISTRICT.shp"
+  workcentres   <- "workcentre_footprints_vicgrid94.shp"
+  point_grid    <- "point_grid_wc.shp" 
 
 # construct full file paths
   raster_simple_full_path <- file.path(output_path, raster_simple)
   raster_slope_full_path  <- file.path(output_path, raster_slope)
   wp_combined_full_path   <- file.path(input_path, wp_combined)
   districts_full_path     <- file.path(input_path, districts)
+  workcentres_full_path   <- file.path(input_path, workcentres)
+  point_grid_full_path    <- file.path(output_path, point_grid)
 
 # import previously processed data
-  raster_simple <- raster::raster(raster_simple_full_path)
-  raster_slope  <- raster::raster(raster_slope_full_path)
-  waterpoints  <- st_read(wp_combined_full_path, quiet=TRUE) %>% st_transform(4326, quiet=TRUE)
-  districts_outline    <- st_read(districts_full_path, quiet = TRUE) %>%
+  raster_simple           <- raster::raster(raster_simple_full_path)
+  raster_slope            <- raster::raster(raster_slope_full_path)
+  waterpoints             <- st_read(wp_combined_full_path, quiet=TRUE) %>% st_transform(4326, quiet=TRUE)
+  districts_outline       <- st_read(districts_full_path, quiet = TRUE) %>%
     st_transform(4326, quiet = TRUE) %>%
     filter(DISTRICT_N == "TAMBO" | DISTRICT_N == "MACALISTER" | DISTRICT_N =="SNOWY" | DISTRICT_N == "LATROBE")
+  workcentres_poly        <- st_read(workcentres_full_path, quiet=TRUE) %>% st_transform(4326, quiet=TRUE)
+  point_data              <- st_read(point_grid_full_path, quiet=TRUE) %>% st_transform(4326, quiet=TRUE)
+
+  
   
   simple_range = range(values(raster_simple))
   slope_range = range(values(raster_slope))
+
+
+# ### Helicopter travel time map (simple)
+# 
+# -   Interactive map of time to closest reservoir (in minutes). Hover mouse over to see return times.
+# -   This map assumes helicopters ascend and descend vertically, and fly horizontally in-between
+# 
+# ```{r Chunk 2: Map 1 (simple), message=FALSE, warning=FALSE, out.width='100%'}
+# 
+# # Create a custom color palette from green (0) to red (30)
+#   custom_palette <- colorRampPalette(c("green", "yellow", "orange", "red"))(10)
+#   custom_palette <- colorBin(custom_palette, c(0, 30), 10, pretty = FALSE)
+# 
+# # Create a Leaflet map
+#   map_raster_simple <- leaflet() %>%
+#     addProviderTiles("OpenStreetMap") %>%
+#     setView(147.20, -37.72,zoom = 8) %>%
+#     addPolygons(
+#       data = as(districts_outline, "Spatial"),
+#       smoothFactor = 0.2,
+#       color = 'purple',
+#       weight =0.8,
+#       opacity = 0.5,
+#       fillOpacity = 0
+#     ) %>%
+#     addRasterImage(
+#       raster_simple,
+#       project = TRUE,
+#       group = "Minutes",
+#       layerId = "Minutes",
+#     colors = custom_palette,
+#     opacity = 0.5
+#     ) %>%
+#     addPolygons(
+#       data = as(waterpoints, "Spatial"),
+#     stroke = FALSE,
+#     smoothFactor = 0.2,
+#     fillColor = 'blue',
+#     fillOpacity = 0.8
+#     ) %>%
+#     addImageQuery(
+#       raster_simple,
+#       project = TRUE,
+#       layerId = "Minutes",
+#       digits = 1,
+#       prefix = "Helicopter return"
+#     ) %>%
+#     addLegend(
+#       "bottomright",
+#       values = simple_range,
+#       pal = custom_palette,
+#       title = "Time in minutes",
+#       opacity = 0.5
+#     )
+#   
+#   # draw map
+#   map_raster_simple
+
+#```
 ```
-
-### Helicopter travel time map (simple)
-
--   Interactive map of time to closest reservoir (in minutes). Hover mouse over to see return times.
--   This map assumes helicopters ascend and descend vertically, and fly horizontally in-between
-
-```{r Chunk 2: Map 1 (simple), message=FALSE, warning=FALSE, out.width='100%'}
-
-# Create a custom color palette from green (0) to red (30)
-  custom_palette <- colorRampPalette(c("green", "yellow", "orange", "red"))(10)
-  custom_palette <- colorBin(custom_palette, c(0, 30), 10, pretty = FALSE)
-
-# Create a Leaflet map
-  map_raster_simple <- leaflet() %>%
-    addProviderTiles("OpenStreetMap") %>%
-    setView(147.20, -37.72,zoom = 8) %>%
-    addPolygons(
-      data = as(districts_outline, "Spatial"),
-      smoothFactor = 0.2,
-      color = 'purple',
-      weight =0.8,
-      opacity = 0.5,
-      fillOpacity = 0
-    ) %>%
-    addRasterImage(
-      raster_simple,
-      project = TRUE,
-      group = "Minutes",
-      layerId = "Minutes",
-    colors = custom_palette,
-    opacity = 0.5
-    ) %>%
-    addPolygons(
-      data = as(waterpoints, "Spatial"),
-    stroke = FALSE,
-    smoothFactor = 0.2,
-    fillColor = 'blue',
-    fillOpacity = 0.8
-    ) %>%
-    addImageQuery(
-      raster_simple,
-      project = TRUE,
-      layerId = "Minutes",
-      digits = 1,
-      prefix = "Helicopter return"
-    ) %>%
-    addLegend(
-      "bottomright",
-      values = simple_range,
-      pal = custom_palette,
-      title = "Time in minutes",
-      opacity = 0.5
-    )
-  
-  # draw map
-  map_raster_simple
-
-```
-
-### Helicopter travel time map (alternative)
+### Helicopter travel time map
 
 -   Interactive map of time to closest reservoir (in minutes). Hover mouse over to see return times.
 -   This map assumes helicopters fly on angles over peaks
@@ -180,9 +190,70 @@ We are currently seeking better water point data, and have drafted a more realis
 
 ### Summary statistics
 
--   To do:
-  -   Average times per region, district, workcentre
-  -   Add bushfire risk information: potential fire size & house loss from bushfire originating at demand point locations.
+- Average times per region, district, workcentre
+- To do:
+-   Add bushfire risk information: potential fire size & house loss from bushfire originating at demand point locations.
 
 ```{r Chunk 4: Improved method, message=FALSE, warning=FALSE, out.width='100%'}
 
+
+
+# Calculate the average values within each workcentre/district footprint
+
+summary_region <- st_drop_geometry(point_data) %>%
+  filter(!is.na(REGION_)) %>%
+  group_by('Region' = REGION_) %>%
+  summarize('Average return time' = round(mean(ttl_tm_s), digits = 2)) %>%
+  ungroup()
+
+summary_district <- st_drop_geometry(point_data) %>%
+  filter(!is.na(District)) %>%
+  group_by(District) %>%
+  summarize('Average return time' = round(mean(ttl_tm_s), digits = 2)) %>%
+  ungroup()
+
+summary_workcentre <- st_drop_geometry(point_data) %>%
+  filter(!is.na(Work_Centr)) %>%
+  group_by('Workcentre' = Work_Centr) %>%
+  summarize('Average return time' = round(mean(ttl_tm_s), digits = 2)) %>%
+  ungroup()
+
+# Create table for region
+formattable(summary_region, align = c("l", "r"))
+
+# Create box plots for districts
+ggplot(data = point_data %>% filter(!is.na(District)), aes(x = District, y = ttl_tm_s)) +
+  geom_boxplot(outlier.size = 0.6, 
+               outlier.colour = 'lightblue', 
+               fill = "white", 
+               color = "black", 
+               notch =FALSE) +
+  stat_boxplot(geom ='errorbar') +
+  labs(x = "District",
+       y = "Return Time") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5)) + 
+  ggtitle("Box Plot of Helicopter Return Time by District")
+
+# Create table for districts
+formattable(summary_district, align = c("l", "r"))
+
+# Create box plots for workcentres
+ggplot(data = point_data %>% filter(!is.na(Work_Centr)),
+       aes(x = Work_Centr, y = ttl_tm_s)) +
+  geom_boxplot(outlier.size = 0.6, 
+               outlier.colour = 'lightblue', 
+               fill = "white", 
+               color = "black", 
+               notch =TRUE) +
+  stat_boxplot(geom ='errorbar') +
+  labs(
+    x = "Workcentre",
+    y = "Return Time"
+  ) +
+  theme(axis.text.x=element_text(angle = -40, hjust = 0)) + 
+ ggtitle("Box Plot of helicopter return time by Workcentre")
+
+# Create table for workcentres
+formattable(summary_workcentre, align = c("l", "r"))
+
+```
