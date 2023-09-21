@@ -11,7 +11,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-### Introduction
+#### **Introduction**
 
 This document demonstrates the modified application of the helicopter travel time analysis process developed by Michael Storey and Michael Jones for Port Phillip to the Gippsland context. The logic is the same, but the process has been updated to enable the use of larger datasets and resolve some issues.
 
@@ -46,7 +46,8 @@ We are currently seeking better water point data, and have drafted a more realis
   wp_combined   <- "Waterpoints_Combined_20230912.shp"
   districts     <- "LF_DISTRICT.shp"
   workcentres   <- "workcentre_footprints_vicgrid94.shp"
-  point_grid    <- "point_grid_wc.shp" 
+  point_grid    <- "point_grid_wc.shp"
+  gipps_frame   <- "Bass_NSW_VIC_GippsExcised.shp"
 
 # construct full file paths
   raster_simple_full_path <- file.path(output_path, raster_simple)
@@ -55,6 +56,7 @@ We are currently seeking better water point data, and have drafted a more realis
   districts_full_path     <- file.path(input_path, districts)
   workcentres_full_path   <- file.path(input_path, workcentres)
   point_grid_full_path    <- file.path(output_path, point_grid)
+  gipps_frame_full_path   <- file.path(input_path, gipps_frame)
 
 # import previously processed data
   raster_simple           <- raster::raster(raster_simple_full_path)
@@ -64,9 +66,9 @@ We are currently seeking better water point data, and have drafted a more realis
     st_transform(4326, quiet = TRUE) %>%
     filter(DISTRICT_N == "TAMBO" | DISTRICT_N == "MACALISTER" | DISTRICT_N =="SNOWY" | DISTRICT_N == "LATROBE")
   workcentres_poly        <- st_read(workcentres_full_path, quiet=TRUE) %>% st_transform(4326, quiet=TRUE)
+  gipps_frame_poly         <- st_read(gipps_frame_full_path, quiet=TRUE) %>% st_transform(4326, quiet=TRUE)
   point_data              <- st_read(point_grid_full_path, quiet=TRUE) %>% st_transform(4326, quiet=TRUE)
 
-  
   
   simple_range = range(values(raster_simple))
   slope_range = range(values(raster_slope))
@@ -130,29 +132,26 @@ We are currently seeking better water point data, and have drafted a more realis
 
 #```
 ```
-### Helicopter travel time map
 
--   Interactive map of time to closest reservoir (in minutes). Hover mouse over to see return times.
--   This map assumes helicopters fly on angles over peaks
+------------------------------------------------------------------------
 
-```{r Chunk 3: Map 2 (advanced), message=FALSE, warning=FALSE, out.width='100%'}
+##  Helicopter travel time map
+
+-   Interactive map of helicopter return time to closest reservoir. Hover mouse over to see return times (minutes).
+-   This map assumes helicopters fly on angles over peaks at a constant speed of 74 km/h while ascending while loaded with water and at 148 km/hr otherwise (level, descending or empty).
+
+```{r Chunk 2: Map (advanced), message=FALSE, warning=FALSE, out.width='100%'}
 
 # Create a custom color palette from green (0) to red (30)
-  custom_palette <- colorRampPalette(c("green", "yellow", "orange", "red"))(10)
+  custom_palette <- colorRampPalette(c("darkcyan", "green", "yellow", "orange", "red", "darkred"))(10)
   custom_palette <- colorBin(custom_palette, c(0, 30), 10, pretty = FALSE)
+  
+
 
 # Create a Leaflet map
   map_raster_slope <- leaflet() %>%
-    addProviderTiles("OpenStreetMap") %>%
+    addProviderTiles("OpenTopoMap") %>%
     setView(147.20, -37.72, zoom = 8) %>%
-    addPolygons(
-      data = as(districts_outline, "Spatial"),
-      smoothFactor = 0.2,
-      color = 'purple',
-      weight = 0.8,
-      opacity = 0.5,
-      fillOpacity = 0
-    ) %>%
     addRasterImage(
       raster_slope,
       project = TRUE,
@@ -160,6 +159,22 @@ We are currently seeking better water point data, and have drafted a more realis
       layerId = "Time",
       colors = custom_palette,
       opacity = 0.5
+    ) %>%
+    addPolygons(
+      data = as(districts_outline, "Spatial"),
+      smoothFactor = 0.8,
+      color = 'white',
+      weight = 1.5,
+      opacity = 0.8,
+      fillOpacity = 0
+    ) %>%
+    addPolygons(
+      data = as(gipps_frame_poly, "Spatial"),
+      stroke = FALSE,
+      smoothFactor = 0.8,
+      fillColor = 'white',
+      fillOpacity = 0.75,
+      opacity = 0.75,
     ) %>%
     addPolygons(
       data = as(waterpoints, "Spatial"),
@@ -183,77 +198,110 @@ We are currently seeking better water point data, and have drafted a more realis
       opacity = 0.5
     )
   
-  #draw map
-  map_raster_slope
+  # Draw map
+    map_raster_slope
 
 ```
 
-### Summary statistics
+------------------------------------------------------------------------
 
-- Average times per region, district, workcentre
-- To do:
--   Add bushfire risk information: potential fire size & house loss from bushfire originating at demand point locations.
+## Summary statistics
 
-```{r Chunk 4: Improved method, message=FALSE, warning=FALSE, out.width='100%'}
+#### **Helicopter return time (minutes) for Gippsland region**
 
+```{r Chunk 3: Summary - Region, message=FALSE, warning=FALSE, out.width='100%'}
 
-
-# Calculate the average values within each workcentre/district footprint
-
-summary_region <- st_drop_geometry(point_data) %>%
-  filter(!is.na(REGION_)) %>%
-  group_by('Region' = REGION_) %>%
-  summarize('Average return time' = round(mean(ttl_tm_s), digits = 2)) %>%
-  ungroup()
-
-summary_district <- st_drop_geometry(point_data) %>%
-  filter(!is.na(District)) %>%
-  group_by(District) %>%
-  summarize('Average return time' = round(mean(ttl_tm_s), digits = 2)) %>%
-  ungroup()
-
-summary_workcentre <- st_drop_geometry(point_data) %>%
-  filter(!is.na(Work_Centr)) %>%
-  group_by('Workcentre' = Work_Centr) %>%
-  summarize('Average return time' = round(mean(ttl_tm_s), digits = 2)) %>%
-  ungroup()
+# Calculate the average values within the regional footprint
+  summary_region <- st_drop_geometry(point_data) %>%
+    filter(!is.na(REGION_)) %>%
+    group_by('Region' = REGION_) %>%
+    summarize('Average return time' = round(mean(ttl_tm_s), digits = 2)) %>%
+    ungroup()
 
 # Create table for region
-formattable(summary_region, align = c("l", "r"))
+  formattable(summary_region, align = c("l", "r"))
+
+```
+
+------------------------------------------------------------------------
+
+#### **Helicopter return time (minutes) for Gippsland districts**
+
+```{r Chunk 4: Summary - District, message=FALSE, warning=FALSE, out.width='100%'}
+
+# Calculate the average values within each district footprint
+  summary_district <- st_drop_geometry(point_data) %>%
+    filter(!is.na(District)) %>%
+    group_by(District) %>%
+    summarize('Average return time' = round(mean(ttl_tm_s), digits = 2)) %>%
+    ungroup()
 
 # Create box plots for districts
-ggplot(data = point_data %>% filter(!is.na(District)), aes(x = District, y = ttl_tm_s)) +
-  geom_boxplot(outlier.size = 0.6, 
-               outlier.colour = 'lightblue', 
-               fill = "white", 
-               color = "black", 
-               notch =FALSE) +
-  stat_boxplot(geom ='errorbar') +
-  labs(x = "District",
-       y = "Return Time") +
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5)) + 
-  ggtitle("Box Plot of Helicopter Return Time by District")
+  plot_district <- ggplot(data = point_data %>% filter(!is.na(District)), 
+                          aes(x = District, y = ttl_tm_s)) +
+    geom_boxplot(outlier.size = 0.6, 
+                 outlier.colour = 'lightblue', 
+                 fill = "white", 
+                 color = "black", 
+                 notch =FALSE) +
+    stat_boxplot(geom ='errorbar') +
+    labs(
+      x = "", #"District",
+      y = "Return Time") +
+    theme(axis.text.x = element_text(angle = 0, hjust = 0.5)) #+ 
+    #ggtitle("Box Plot of Helicopter Return Time by District")
+  
+# Force plot axis to extend to zero
+  plot_district <- plot_district + expand_limits(x = 0, y = 0)
 
+# Draw plot
+  plot_district
+    
 # Create table for districts
-formattable(summary_district, align = c("l", "r"))
+  formattable(summary_district, list(
+    'Average return time' = color_bar("lightblue", fun='proportion')),
+    align = c("l", "r"))
+
+```
+
+------------------------------------------------------------------------
+
+#### **Helicopter return time (minutes) for Gippsland workcentres**
+
+```{r Chunk 5: Summary - Workcentre, message=FALSE, warning=FALSE, out.width='100%'}
+
+# Calculate the average values within each workcentre footprint
+  summary_workcentre <- st_drop_geometry(point_data) %>%
+    filter(!is.na(Work_Centr)) %>%
+    group_by('Workcentre' = Work_Centr) %>%
+    summarize('Average return time' = round(mean(ttl_tm_s), digits = 2)) %>%
+    ungroup()
 
 # Create box plots for workcentres
-ggplot(data = point_data %>% filter(!is.na(Work_Centr)),
-       aes(x = Work_Centr, y = ttl_tm_s)) +
-  geom_boxplot(outlier.size = 0.6, 
-               outlier.colour = 'lightblue', 
-               fill = "white", 
-               color = "black", 
-               notch =TRUE) +
-  stat_boxplot(geom ='errorbar') +
-  labs(
-    x = "Workcentre",
-    y = "Return Time"
-  ) +
-  theme(axis.text.x=element_text(angle = -40, hjust = 0)) + 
- ggtitle("Box Plot of helicopter return time by Workcentre")
+  plot_workcentre <- ggplot(data = point_data %>% filter(!is.na(Work_Centr)),
+                            aes(x = Work_Centr, y = ttl_tm_s)) +
+    geom_boxplot(outlier.size = 0.6, 
+                 outlier.colour = 'lightblue', 
+                 fill = "white", 
+                 color = "black", 
+                 notch =TRUE) +
+    stat_boxplot(geom ='errorbar') +
+    labs(
+      x = "", #"Workcentre",
+      y = "Return Time"
+    ) +
+    theme(axis.text.x=element_text(angle = -40, hjust = 0))
+
+# Force plot axis to extend to zero
+  plot_workcentre <- plot_workcentre + expand_limits(x = 0, y = 0)
+
+# Draw plot
+  plot_workcentre
 
 # Create table for workcentres
-formattable(summary_workcentre, align = c("l", "r"))
+  formattable(summary_workcentre, list(
+    'Average return time' = color_bar("lightblue", fun='proportion')),
+    align = c("l", "r")
+    )
 
 ```
